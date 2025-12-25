@@ -1,0 +1,371 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "YTzinho Hub - Build a Boat For Treasure",
+   LoadingTitle = "YTzinho Hub",
+   LoadingSubtitle = "by YT",
+   Theme = "Default",
+   ToggleUIKeybind = "K",
+   ConfigurationSaving = {
+      Enabled = true,
+      FileName = "Aura Hub"
+   },
+   Discord = {
+      Enabled = true,
+      Invite = "JF2F2RANud",
+      RememberJoins = true
+   },
+   KeySystem = false
+})
+
+local AuraHub = Window:CreateTab("Aura Hub", 4483362458)
+local Farm = Window:CreateTab("Farm", 4483362458)
+
+-- ===== VARIÁVEIS DO FARM =====
+local farmEnabled = false
+local flySpeed = 400 -- Velocidade fixa em 400
+local flyingControls = {
+    bodyGyro = nil,
+    bodyVelocity = nil
+}
+
+-- ===== COORDENADAS DO FARM =====
+local coordinates = {
+    first = Vector3.new(-49.88, 91.55, -62.53),
+    second = Vector3.new(-66.54, 50.05, 8334.43)
+}
+
+-- ===== FUNÇÃO PARA INICIAR/CONFIGURAR CONTROLES DE VOO =====
+local function setupFlightControls(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
+    
+    local rootPart = character.HumanoidRootPart
+    local humanoid = character:FindFirstChild("Humanoid")
+    
+    if not humanoid then
+        return false
+    end
+    
+    -- Remover controles antigos se existirem
+    if flyingControls.bodyGyro then
+        flyingControls.bodyGyro:Destroy()
+        flyingControls.bodyGyro = nil
+    end
+    
+    if flyingControls.bodyVelocity then
+        flyingControls.bodyVelocity:Destroy()
+        flyingControls.bodyVelocity = nil
+    end
+    
+    -- Ativar modo de voo
+    humanoid.PlatformStand = true
+    
+    -- Criar BodyGyro para estabilização
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.P = 15000
+    bodyGyro.CFrame = rootPart.CFrame
+    bodyGyro.Parent = rootPart
+    flyingControls.bodyGyro = bodyGyro
+    
+    -- Criar BodyVelocity para movimento
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.P = 15000
+    bodyVelocity.Parent = rootPart
+    flyingControls.bodyVelocity = bodyVelocity
+    
+    return true
+end
+
+-- ===== FUNÇÃO PARA MANTER FLUTUAÇÃO (PARADO NO AR) =====
+local function hoverInPlace(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
+    
+    local rootPart = character.HumanoidRootPart
+    local humanoid = character:FindFirstChild("Humanoid")
+    
+    if not humanoid or not flyingControls.bodyGyro or not flyingControls.bodyVelocity then
+        return false
+    end
+    
+    -- Configurar para manter posição atual
+    flyingControls.bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    flyingControls.bodyGyro.CFrame = rootPart.CFrame
+    
+    -- Ajuste sutil para evitar queda
+    if rootPart.Position.Y < 50 then
+        flyingControls.bodyVelocity.Velocity = Vector3.new(0, 10, 0)
+    end
+    
+    return true
+end
+
+-- ===== FUNÇÃO PARA VOAR ATÉ UMA POSIÇÃO COM FLUTUAÇÃO =====
+local function flyToPosition(targetPosition)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character.HumanoidRootPart
+    
+    if not humanoid then
+        return false
+    end
+    
+    -- Configurar controles de voo se não existirem
+    if not flyingControls.bodyGyro or not flyingControls.bodyVelocity then
+        if not setupFlightControls(character) then
+            return false
+        end
+    end
+    
+    -- Calcular direção inicial
+    local startPosition = rootPart.Position
+    local distance = (targetPosition - startPosition).Magnitude
+    local lastCheckTime = tick()
+    local lastPosition = startPosition
+    local stuckCount = 0
+    
+    -- Loop de movimento com flutuação
+    while farmEnabled and character and rootPart and humanoid.Health > 0 do
+        -- Calcular direção atual
+        local currentPosition = rootPart.Position
+        local direction = (targetPosition - currentPosition).Unit
+        local currentDistance = (targetPosition - currentPosition).Magnitude
+        
+        -- Verificar se chegou
+        if currentDistance < 10 then
+            -- Flutuar no lugar
+            hoverInPlace(character)
+            return true
+        end
+        
+        -- Verificar se está preso
+        if tick() - lastCheckTime > 1 then
+            local movedDistance = (currentPosition - lastPosition).Magnitude
+            if movedDistance < 5 then
+                stuckCount = stuckCount + 1
+                if stuckCount >= 2 then
+                    -- Aplicar impulso em ângulo diferente
+                    local adjustedDirection = direction + Vector3.new(math.random(-1, 1), 1, math.random(-1, 1)).Unit
+                    flyingControls.bodyVelocity.Velocity = adjustedDirection.Unit * flySpeed * 1.5
+                    wait(0.2)
+                    stuckCount = 0
+                end
+            else
+                stuckCount = 0
+            end
+            lastCheckTime = tick()
+            lastPosition = currentPosition
+        end
+        
+        -- Calcular velocidade
+        local speed = flySpeed
+        if currentDistance < 100 then
+            speed = math.min(flySpeed, currentDistance * 2)
+        end
+        
+        -- Definir velocidade
+        flyingControls.bodyVelocity.Velocity = direction * speed
+        
+        -- Ajustar rotação para olhar na direção do movimento
+        flyingControls.bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + direction)
+        
+        -- Ajuste de altura instantâneo
+        local heightDiff = targetPosition.Y - currentPosition.Y
+        if math.abs(heightDiff) > 5 then
+            flyingControls.bodyVelocity.Velocity = flyingControls.bodyVelocity.Velocity + Vector3.new(0, heightDiff * 0.8, 0)
+        end
+        
+        wait(0.02)
+    end
+    
+    -- Se saiu do loop mas não chegou, manter flutuação
+    if character and humanoid and humanoid.Health > 0 then
+        hoverInPlace(character)
+    end
+    
+    -- Verificar se chegou com sucesso
+    if character and rootPart then
+        local finalDistance = (rootPart.Position - targetPosition).Magnitude
+        return finalDistance < 15
+    end
+    
+    return false
+end
+
+-- ===== FUNÇÃO PARA RESETAR O PERSONAGEM =====
+local function resetCharacter()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    
+    -- Limpar controles de voo antes de resetar
+    if flyingControls.bodyGyro then
+        flyingControls.bodyGyro:Destroy()
+        flyingControls.bodyGyro = nil
+    end
+    
+    if flyingControls.bodyVelocity then
+        flyingControls.bodyVelocity:Destroy()
+        flyingControls.bodyVelocity = nil
+    end
+    
+    if character and character:FindFirstChild("Humanoid") then
+        character.Humanoid.Health = 0
+        return true
+    end
+    
+    return false
+end
+
+-- ===== FUNÇÃO PARA AGUARDAR RESPAWN =====
+local function waitForRespawn()
+    local player = game.Players.LocalPlayer
+    local startTime = tick()
+    local maxWaitTime = 10
+    
+    while farmEnabled do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                -- Configurar controles de voo para o novo personagem
+                setupFlightControls(player.Character)
+                return true
+            end
+        end
+        
+        if tick() - startTime > maxWaitTime then
+            return false
+        end
+        
+        wait(0.1)
+    end
+    
+    return false
+end
+
+-- ===== FUNÇÃO PRINCIPAL DO FARM =====
+local function startFarmCycle()
+    farmEnabled = true
+    
+    -- Configurar controles iniciais
+    local player = game.Players.LocalPlayer
+    if player.Character then
+        setupFlightControls(player.Character)
+    end
+    
+    while farmEnabled do
+        -- Primeira coordenada
+        local success1 = flyToPosition(coordinates.first)
+        
+        if success1 then
+            -- Segunda coordenada
+            local success2 = flyToPosition(coordinates.second)
+            
+            if success2 then
+                -- Resetar personagem
+                if resetCharacter() then
+                    -- Aguardar respawn e configurar voo
+                    if not waitForRespawn() then
+                        farmEnabled = false
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    stopFarm()
+end
+
+-- ===== FUNÇÃO PARA PARAR O FARM =====
+local function stopFarm()
+    farmEnabled = false
+    
+    -- Limpar instâncias
+    if flyingControls.bodyGyro then
+        flyingControls.bodyGyro:Destroy()
+        flyingControls.bodyGyro = nil
+    end
+    
+    if flyingControls.bodyVelocity then
+        flyingControls.bodyVelocity:Destroy()
+        flyingControls.bodyVelocity = nil
+    end
+    
+    -- Restaurar estado normal do personagem
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character and character:FindFirstChild("Humanoid") then
+        character.Humanoid.PlatformStand = false
+        character.Humanoid:ChangeState(Enum.HumanoidStateType.Running)
+    end
+end
+
+-- ===== TOGGLE DO GOLD AUTO FARM =====
+local farmToggle = Farm:CreateToggle({
+   Name = "Gold auto farm",
+   CurrentValue = false,
+   Callback = function(Value)
+       if Value then
+           spawn(function()
+               startFarmCycle()
+           end)
+       else
+           stopFarm()
+       end
+   end
+})
+
+-- ===== FUNÇÕES DA ABA AURA HUB =====
+local SectionMain = AuraHub:CreateSection("Funções Principais")
+
+local ToggleFlash = AuraHub:CreateToggle({
+   Name = "Flash (Velocidade)",
+   CurrentValue = false,
+   Callback = function(Value)
+      local player = game.Players.LocalPlayer
+      if player.Character and player.Character:FindFirstChild("Humanoid") then
+         player.Character.Humanoid.WalkSpeed = Value and 100 or 16
+         print(Value and "⚡ Flash ATIVADO (Velocidade: 100)" or "🐢 Flash DESATIVADO (Velocidade: 16)")
+      end
+   end
+})
+
+local ButtonKill = AuraHub:CreateButton({
+   Name = "💀 Auto-Matar",
+   Callback = function()
+      local player = game.Players.LocalPlayer
+      if player.Character and player.Character:FindFirstChild("Humanoid") then
+         player.Character.Humanoid.Health = 0
+         print("💀 Personagem eliminado")
+      end
+   end
+})
+
+local SliderJump = AuraHub:CreateSlider({
+   Name = "Pulo (JumpPower)",
+   Range = {50, 200},
+   Increment = 10,
+   Suffix = "",
+   CurrentValue = 50,
+   Callback = function(Value)
+      local player = game.Players.LocalPlayer
+      if player.Character and player.Character:FindFirstChild("Humanoid") then
+         player.Character.Humanoid.JumpPower = Value
+         print("🦘 JumpPower ajustado para: " .. Value)
+      end
+   end
+})
+
+Rayfield:LoadConfiguration()
